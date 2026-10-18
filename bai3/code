@@ -1,0 +1,157 @@
+///////
+using System;
+using System.Windows.Forms;
+using System.Drawing;
+
+namespace bai3_18_10
+{
+    public partial class frmPatientProfiles : Form
+    {
+        public frmPatientProfiles()
+        {
+            this.Text = "Hồ Sơ Bệnh Nhân";
+            this.Size = new Size(500, 350);
+            this.BackColor = Color.LightBlue;
+
+            // Thêm một Label minh họa nội dung bên trong Form con
+            Label lblInfo = new Label
+            {
+                Text = "DANH SÁCH QUẢN LÝ HỒ SƠ BỆNH NHÂN\n(Dữ liệu mẫu kết nối hệ thống MDI)",
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                Location = new Point(30, 50),
+                AutoSize = true
+            };
+            this.Controls.Add(lblInfo);
+        }
+    }
+}
+/////////
+using System;
+using System.Windows.Forms;
+using System.Drawing;
+
+namespace bai3_18_10
+{
+    public partial class frmDoctorSchedule : Form
+    {
+        public frmDoctorSchedule()
+        {
+            this.Text = "Lịch Trực Bác Sĩ";
+            this.Size = new Size(500, 350);
+            this.BackColor = Color.LightGreen;
+
+            // Thêm một Label minh họa nội dung bên trong Form con
+            Label lblInfo = new Label
+            {
+                Text = "LỊCH PHÂN CÔNG TRỰC BAN BÁC SĨ\n(Dữ liệu mẫu kết nối hệ thống MDI)",
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                Location = new Point(30, 50),
+                AutoSize = true
+            };
+            this.Controls.Add(lblInfo);
+        }
+    }
+}
+/////////
+using bai3_18_10;
+using System;
+using System.Windows.Forms;
+
+namespace bai3_18_10
+{
+    public partial class Form1 : Form
+    {
+        public Form1()
+        {
+            // Khởi tạo thanh menu điều hướng từ file Designer
+            InitializeComponent();
+
+            // Đăng ký sự kiện Click cho nhóm chức năng mở Form con (Yêu cầu Nghiệp vụ 1)
+            menuPatient.Click += MenuPatient_Click;
+            menuDoctor.Click += MenuDoctor_Click;
+            menuRoom.Click += MenuRoom_Click;
+
+            // Đăng ký sự kiện Click cho nhóm chức năng sắp xếp cửa sổ MDI (Yêu cầu Nghiệp vụ 2)
+            menuCascade.Click += (s, e) => this.LayoutMdi(MdiLayout.Cascade);
+            menuTileHorizontal.Click += (s, e) => this.LayoutMdi(MdiLayout.TileHorizontal);
+            menuTileVertical.Click += (s, e) => this.LayoutMdi(MdiLayout.TileVertical);
+            menuCloseAll.Click += MenuCloseAll_Click;
+
+            // Sự kiện hệ thống cơ bản
+            menuLogout.Click += (s, e) => MessageBox.Show("Đã đăng xuất tài khoản quản lý an toàn!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            menuReload.Click += MenuReload_Click;
+            menuExit.Click += (s, e) => Application.Exit();
+        }
+
+        // =========================================================================
+        // NGHIỆP VỤ 1: DUYỆT VÒNG ĐỜI VÀ NGĂN CHẶN HÀNH VI MỞ LẶP LẠI (DUPLICATE) FORM CON
+        // =========================================================================
+        private void OpenMdiChildForm(Type childFormType)
+        {
+            // Duyệt qua tất cả các Form con MDI hiện tại đang hiển thị trong bộ nhớ của Form cha
+            foreach (Form child in this.MdiChildren)
+            {
+                // Nếu tìm thấy một Form con có kiểu lớp (Type) trùng khớp với Form đang định gọi mở
+                if (child.GetType() == childFormType)
+                {
+                    // Thực hiện kích hoạt đưa Form con đang có sẵn này hiển thị đè lên trên cùng màn hình
+                    child.Activate();
+                    return; // Thoát hàm để ngăn không khởi tạo thêm Instance mới gây lặp lại
+                }
+            }
+
+            // Nếu vòng lặp trên kết thúc mà không tìm thấy Form nào đang mở, tiến hành tạo mới hoàn toàn
+            Form newFormInstance = (Form)Activator.CreateInstance(childFormType);
+            newFormInstance.MdiParent = this; // Gán chỉ định Form cha quản lý trực tiếp
+            newFormInstance.Show();           // Hiển thị Form con nhúng trong không gian MDI
+        }
+
+        // Xử lý sự kiện click mở Cửa sổ Hồ sơ Bệnh nhân
+        private void MenuPatient_Click(object sender, EventArgs e)
+        {
+            OpenMdiChildForm(typeof(frmPatientProfiles));
+        }
+
+        // Xử lý sự kiện click mở Cửa sổ Lịch Trực Bác Sĩ
+        private void MenuDoctor_Click(object sender, EventArgs e)
+        {
+            OpenMdiChildForm(typeof(frmDoctorSchedule));
+        }
+
+        // Xử lý thông báo danh mục Khoa/Phòng
+        private void MenuRoom_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show("Chức năng Quản lý Khoa/Phòng đang được cập nhật thêm cơ sở dữ liệu!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Đóng tất cả các cửa sổ con đang hoạt động cùng một lúc
+        private void MenuCloseAll_Click(object sender, EventArgs e)
+        {
+            foreach (Form child in this.MdiChildren)
+            {
+                child.Close();
+            }
+        }
+
+        // Giả lập cơ chế nạp lại dữ liệu hệ thống chạy thanh ToolStripProgressBar
+        private void MenuReload_Click(object sender, EventArgs e)
+        {
+            progressBarSystem.Value = 0;
+            Timer t = new Timer { Interval = 100 };
+            t.Tick += (s, ev) =>
+            {
+                if (progressBarSystem.Value < 100)
+                {
+                    progressBarSystem.Value += 20;
+                }
+                else
+                {
+                    t.Stop();
+                    t.Dispose();
+                    MessageBox.Show("Đồng bộ và nạp lại toàn bộ dữ liệu hồ sơ bệnh án thành công!", "Hệ thống", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            };
+            t.Start();
+        }
+    }
+}
