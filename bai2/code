@@ -1,0 +1,362 @@
+////////
+using System;
+
+namespace bai2_18_10
+{
+    public class BookModel
+    {
+        public string BookId { get; set; }
+        public string Title { get; set; }
+        public string Author { get; set; }
+        public int Quantity { get; set; }
+        public decimal Price { get; set; }
+
+        // Tính tổng trị giá của đầu sách này bằng công thức: Số lượng x Đơn giá
+        public decimal TotalValue => Quantity * Price;
+
+        public string CoverImagePath { get; set; } // Lưu đường dẫn tập tin ảnh bìa sách
+    }
+}
+///////
+using bai2_18_10;
+using System;
+using System.ComponentModel;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Windows.Forms;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+
+namespace bai2_18_10
+{
+    public partial class Form1 : Form
+    {
+        private BindingList<BookModel> originalBookList = new BindingList<BookModel>();
+        private BindingSource bindingSource = new BindingSource();
+        private string loadedImgPath = ""; // Biến lưu đường dẫn ảnh bìa tạm thời khi tải ảnh
+
+        public Form1()
+        {
+            InitializeComponent();
+
+            // Đăng ký các sự kiện tương tác MenuStrip, ToolStrip và Sự kiện của lưới bảng
+            menuOpenCsv.Click += ExecuteImportCsv;
+            tsBtnOpen.Click += ExecuteImportCsv;
+            menuSaveCsv.Click += ExecuteExportCsv;
+            tsBtnSave.Click += ExecuteExportCsv;
+            menuExit.Click += (s, e) => Application.Exit();
+
+            menuAdd.Click += ExecuteAddBook;
+            tsBtnAdd.Click += ExecuteAddBook;
+            menuDelete.Click += ExecuteDeleteBook;
+            menuSearch.Click += (s, e) => txtSearch.Focus();
+
+            btnLoadCover.Click += BtnLoadCover_Click;
+            btnClearCover.Click += BtnClearCover_Click;
+            txtSearch.TextChanged += TxtSearch_TextChanged;
+            dgvBooks.SelectionChanged += DgvBooks_SelectionChanged;
+
+            // Tìm kiếm các nút bấm hành động trong layout để gán sự kiện Click trực tiếp
+            var btnAddAction = this.Controls.Find("btnAddAction", true).FirstOrDefault() as System.Windows.Forms.Button;
+            var btnUpdateAction = this.Controls.Find("btnUpdateAction", true).FirstOrDefault() as System.Windows.Forms.Button;
+            var btnDeleteAction = this.Controls.Find("btnDeleteAction", true).FirstOrDefault() as System.Windows.Forms.Button;
+            var btnClearAction = this.Controls.Find("btnClearAction", true).FirstOrDefault() as System.Windows.Forms.Button;
+
+
+            if (btnAddAction != null) btnAddAction.Click += ExecuteAddBook;
+            if (btnUpdateAction != null) btnUpdateAction.Click += ExecuteUpdateBook;
+            if (btnDeleteAction != null) btnDeleteAction.Click += ExecuteDeleteBook;
+            if (btnClearAction != null) btnClearAction.Click += BtnClearAction_Click;
+
+            // Khởi chạy kích hoạt đồng hồ hệ thống chạy thời gian thực
+            timerClock.Tick += (s, e) => lblCurrentTime.Text = $"Thời gian hiện tại: {DateTime.Now:HH:mm:ss}";
+
+            // Liên kết đồng bộ dữ liệu thông qua BindingSource
+            bindingSource.DataSource = originalBookList;
+            dgvBooks.DataSource = bindingSource;
+
+            // Đổ một vài dữ liệu mẫu ban đầu để chạy thử ứng dụng
+            LoadSampleBooks();
+        }
+
+        private void LoadSampleBooks()
+        {
+            originalBookList.Add(new BookModel { BookId = "S001", Title = "Đắc Nhân Tâm", Author = "Dale Carnegie", Quantity = 50, Price = 86000, CoverImagePath = "" });
+            originalBookList.Add(new BookModel { BookId = "S002", Title = "Nhà Giả Kim", Author = "Paulo Coelho", Quantity = 120, Price = 79000, CoverImagePath = "" });
+            originalBookList.Add(new BookModel { BookId = "S003", Title = "Lập Trình C# Toàn Tập", Author = "Phạm Hữu Độ", Quantity = 35, Price = 150000, CoverImagePath = "" });
+
+            RefreshStatistics();
+        }
+
+        // NGHIỆP VỤ 3: TỰ ĐỘNG TÍNH TOÁN LẠI VÀ CẬP NHẬT TRẠNG THÁI LÊN STATUSSTRIP CHI TIẾT
+        private void RefreshStatistics()
+        {
+            int uniqueTitles = originalBookList.Count;
+            decimal totalInventoryValue = originalBookList.Sum(b => b.TotalValue);
+
+            lblTotalBooks.Text = $"Tổng số đầu sách: {uniqueTitles}  |  ";
+            lblTotalValue.Text = $"Tổng giá trị tiền sách kho: {totalInventoryValue:N0} VND  |  ";
+        }
+
+        // NGHIỆP VỤ 1: THAO TÁC CHỌN ẢNH BÌA SÁCH BẰNG OPENFILEDIALOG
+        private void BtnLoadCover_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Filter = "Image Files (*.jpg;*.jpeg;*.png)|*.jpg;*.jpeg;*.png";
+                ofd.Title = "Chọn file hình ảnh làm ảnh bìa sách";
+
+                if (ofd.ShowDialog() == DialogResult.OK)
+                {
+                    loadedImgPath = ofd.FileName;
+                    picBookCover.Image = Image.FromFile(loadedImgPath);
+                }
+            }
+        }
+
+        private void BtnClearCover_Click(object sender, EventArgs e)
+        {
+            loadedImgPath = "";
+            picBookCover.Image = null;
+        }
+
+        // TÌM KIẾM TỨC THỜI THEO TỰA ĐỀ TÊN SÁCH
+        private void TxtSearch_TextChanged(object sender, EventArgs e)
+        {
+            string keyword = txtSearch.Text.Trim().ToLower();
+            if (string.IsNullOrEmpty(keyword))
+            {
+                bindingSource.DataSource = originalBookList;
+            }
+            else
+            {
+                var filtered = originalBookList.Where(b => b.Title.ToLower().Contains(keyword)).ToList();
+                bindingSource.DataSource = new BindingList<BookModel>(filtered);
+            }
+        }
+
+        // ĐỔ NGƯỢC DỮ LIỆU TỪ DÒNG CHỌN TRÊN GRID LÊN CÁC Ô NHẬP LIỆU
+        private void dgvBooks_SelectionChanged(object sender, EventArgs e)
+        {
+            // Được gọi tự động, tránh xung đột dùng dgvBooks thay vì biến dgvList cũ
+        }
+
+        private void DgvBooks_SelectionChanged(object sender, EventArgs e)
+        {
+            if (dgvBooks.CurrentRow != null)
+            {
+                var book = (BookModel)dgvBooks.CurrentRow.DataBoundItem;
+                txtBookId.Text = book.BookId;
+                txtBookId.ReadOnly = true; // Khóa chính không cho phép sửa đổi
+
+                txtTitle.Text = book.Title;
+                txtAuthor.Text = book.Author;
+                numQuantity.Value = book.Quantity;
+                numPrice.Value = book.Price;
+                loadedImgPath = book.CoverImagePath;
+
+                if (!string.IsNullOrEmpty(loadedImgPath) && File.Exists(loadedImgPath))
+                {
+                    picBookCover.Image = Image.FromFile(loadedImgPath);
+                }
+                else
+                {
+                    picBookCover.Image = null;
+                }
+            }
+        }
+
+        // HỆ THỐNG KIỂM TRA HỢP LỆ DỮ LIỆU ĐẦU VÀO (VALIDATION)
+        private bool ValidateForm(bool isAddingMode)
+        {
+            errorProvider.Clear();
+            bool isValid = true;
+
+            if (string.IsNullOrWhiteSpace(txtBookId.Text))
+            {
+                errorProvider.SetError(txtBookId, "Mã sách bắt buộc phải nhập.");
+                isValid = false;
+            }
+            else if (isAddingMode && originalBookList.Any(b => b.BookId.Trim().ToLower() == txtBookId.Text.Trim().ToLower()))
+            {
+                errorProvider.SetError(txtBookId, "Mã đầu sách này đã tồn tại.");
+                isValid = false;
+            }
+
+            if (string.IsNullOrWhiteSpace(txtTitle.Text))
+            {
+                errorProvider.SetError(txtTitle, "Tựa đề tên sách không được để trống.");
+                isValid = false;
+            }
+
+            if (string.IsNullOrWhiteSpace(txtAuthor.Text))
+            {
+                errorProvider.SetError(txtAuthor, "Tên tác giả cuốn sách không được để trống.");
+                isValid = false;
+            }
+
+            return isValid;
+        }
+
+        // THAO TÁC: THÊM ĐẦU SÁCH MỚI
+        private void ExecuteAddBook(object sender, EventArgs e)
+        {
+            if (!ValidateForm(isAddingMode: true)) return;
+
+            var newBook = new BookModel
+            {
+                BookId = txtBookId.Text.Trim(),
+                Title = txtTitle.Text.Trim(),
+                Author = txtAuthor.Text.Trim(),
+                Quantity = (int)numQuantity.Value,
+                Price = numPrice.Value,
+                CoverImagePath = loadedImgPath
+            };
+
+            originalBookList.Add(newBook);
+            RefreshStatistics();
+            MessageBox.Show("Thêm mới sách vào kho thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            BtnClearAction_Click(null, null);
+        }
+
+        // THAO TÁC: SỬA VÀ ĐỒNG BỘ DỮ LIỆU ĐỐI TƯỢNG SÁCH
+        private void ExecuteUpdateBook(object sender, EventArgs e)
+        {
+            if (dgvBooks.CurrentRow == null) return;
+            if (!ValidateForm(isAddingMode: false)) return;
+
+            var selectedBook = (BookModel)dgvBooks.CurrentRow.DataBoundItem;
+            var target = originalBookList.FirstOrDefault(b => b.BookId == selectedBook.BookId);
+
+            if (target != null)
+            {
+                target.Title = txtTitle.Text.Trim();
+                target.Author = txtAuthor.Text.Trim();
+                target.Quantity = (int)numQuantity.Value;
+                target.Price = numPrice.Value;
+                target.CoverImagePath = loadedImgPath;
+
+                originalBookList.ResetBindings(); // Đồng bộ dữ liệu xuống Grid lập tức
+                RefreshStatistics();
+                MessageBox.Show("Cập nhật thông tin tài liệu sách thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        // THAO TÁC: XÓA ĐẦU SÁCH CÓ XÁC NHẬN CẢNH BÁO
+        private void ExecuteDeleteBook(object sender, EventArgs e)
+        {
+            if (dgvBooks.CurrentRow == null) return;
+
+            var selectedBook = (BookModel)dgvBooks.CurrentRow.DataBoundItem;
+            var result = MessageBox.Show($"Bạn có thực sự muốn xóa đầu sách '{selectedBook.Title}' (Mã: {selectedBook.BookId}) khỏi kho hàng không?",
+                "Xác nhận xóa tài liệu sách", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+            if (result == DialogResult.Yes)
+            {
+                var target = originalBookList.FirstOrDefault(b => b.BookId == selectedBook.BookId);
+                if (target != null)
+                {
+                    originalBookList.Remove(target);
+                    RefreshStatistics();
+                    BtnClearAction_Click(null, null);
+                    MessageBox.Show("Đã xóa đầu sách ra khỏi kho lưu trữ dữ liệu!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+        }
+        private void BtnClearAction_Click(object sender, EventArgs e)
+        {
+            txtBookId.ReadOnly = false;
+            txtBookId.Clear();
+            txtTitle.Clear();
+            txtAuthor.Clear();
+            numQuantity.Value = 0;
+            numPrice.Value = 0;
+            loadedImgPath = "";
+            picBookCover.Image = null;
+            errorProvider.Clear();
+        }
+        // NGHIỆP VỤ 2. XUẤT FILE BÁO CÁO NHÀ SÁCH ĐỊNH DẠNG CSV QUA SAVEFILEDIALOG
+        private void ExecuteExportCsv(object sender, EventArgs e)
+        {
+            if (originalBookList.Count == 0)
+            {
+                MessageBox.Show("Không có dữ liệu trong kho sách hiện tại để xuất file báo cáo!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            using (SaveFileDialog sfd = new SaveFileDialog())
+            {
+                sfd.Filter = "CSV Files (.csv)|.csv";
+                sfd.FileName = $"BaoCaoKhoSach_{DateTime.Now:yyyyMMdd}.csv";
+                sfd.Title = "Chọn nơi lưu file báo cáo dữ liệu nhà sách";
+                if (sfd.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        StringBuilder sb = new StringBuilder();
+                        sb.AppendLine("Ma Sach,Tua De Sach,Tac Gia,So Luong Kho,Don Gia,Tong Tri Gia,Duong Dan Anh Bia");
+                        foreach (var b in originalBookList)
+                        {
+                            // Thực hiện duyệt và ghi file phân cách bằng dấu phẩy theo yêu cầu đề bài
+                            sb.AppendLine($"{b.BookId},{b.Title.Replace(",", " ")},{b.Author.Replace(",", " ")},{b.Quantity},{b.Price},{b.TotalValue},{b.CoverImagePath}");
+                        }
+                        File.WriteAllText(sfd.FileName, sb.ToString(), Encoding.UTF8);
+                        MessageBox.Show("Xuất file báo cáo thống kê CSV dữ liệu nhà sách thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Xảy ra lỗi trong quá trình ghi tệp: {ex.Message}", "Lỗi hệ thống", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+        // NGHIỆP VỤ 2. NHẬP (IMPORT) ĐỌC FILE CSV VÀO BINDINGLIST QUA OPENFILEDIALOG
+        private void ExecuteImportCsv(object sender, EventArgs e)
+        {
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Filter = "CSV Files (.csv)|.csv";
+                ofd.Title = "Chọn tập tin dữ liệu CSV chứa danh sách đầu sách cần nhập";
+                if (ofd.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        var lines = File.ReadAllLines(ofd.FileName, Encoding.UTF8);
+                        if (lines.Length <= 1)
+                        {
+                            MessageBox.Show("Tập tin CSV được chọn trống hoặc không chứa dữ liệu hợp lệ!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        originalBookList.Clear(); // Dọn danh sách cũ để chuẩn bị parse nạp dữ liệu mới vào
+                                                  // Bỏ qua dòng tiêu đề đầu tiên (index 0), bắt đầu đọc dữ liệu từ index 1
+                        for (int i = 1; i < lines.Length; i++)
+                        {
+                            string line = lines[i];
+                            if (string.IsNullOrWhiteSpace(line)) continue;
+                            string[] parts = line.Split(',');
+                            if (parts.Length >= 6)
+                            {
+                                var book = new BookModel
+                                {
+                                    BookId = parts[0].Trim(),
+                                    Title = parts[1].Trim(),
+                                    Author = parts[2].Trim(),
+                                    Quantity = int.Parse(parts[3].Trim()),
+                                    Price = decimal.Parse(parts[4].Trim()),
+                                    CoverImagePath = parts.Length > 6 ? parts[6].Trim() : ""
+                                };
+                                originalBookList.Add(book);
+                            }
+                        }
+                        RefreshStatistics(); // Tính toán lại số liệu tổng giá trị kho ngay sau khi nhập file thành công
+                        MessageBox.Show("Đọc dữ liệu từ file CSV và nạp danh sách kho sách thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Xảy ra lỗi trong quá trình đọc tập tin CSV: {ex.Message}\nVui lòng kiểm tra lại cấu trúc file.", "Lỗi định dạng", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+    }
+}
