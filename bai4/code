@@ -1,0 +1,156 @@
+//////
+using System;
+
+namespace bai4_18_10
+{
+    public class RevenueModel
+    {
+        public string TransactionId { get; set; }
+        public DateTime TransactionDate { get; set; }
+        public string BranchName { get; set; }
+        public string ServiceType { get; set; }
+        public decimal Amount { get; set; }
+    }
+}
+//////
+using bai4_18_10;
+using System;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace bai4_18_10
+{
+    public partial class Form1 : Form
+    {
+        // Khai báo đối tượng quản lý ngắt tiến trình ngầm đa luồng từ xa an toàn
+        private CancellationTokenSource _cts;
+
+        public Form1()
+        {
+            InitializeComponent();
+
+            // Đăng ký sự kiện Click xử lý Multi-threading cho các nút bấm hành động
+            btnAnalytics.Click += BtnAnalytics_Click;
+            btnCancel.Click += BtnCancel_Click;
+        }
+
+        // =========================================================================
+        // NGHIỆP VỤ 1: XỬ LÝ BẤT ĐỒNG BỘ (TASK.RUN & ASYNC/AWAIT) - KHÔNG KHÓA TREO UI THREAD
+        // =========================================================================
+        private async void BtnAnalytics_Click(object sender, EventArgs e)
+        {
+            // Kiểm tra mốc logic thời gian cơ bản của bộ lọc đầu vào
+            if (dtpToDate.Value.Date < dtpFromDate.Value.Date)
+            {
+                MessageBox.Show("Mốc thời gian kết thúc tìm kiếm không được trước ngày bắt đầu!", "Tiêu chí sai", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Đổi trạng thái hiển thị các nút bấm để chuẩn bị bước vào tiến trình xử lý nặng
+            btnAnalytics.Enabled = false;
+            btnCancel.Enabled = true;
+            dgvRevenueData.DataSource = null; // Làm trống bảng kết quả cũ trước khi thống kê
+            pgbLoading.Value = 0;
+
+            // Khởi tạo mã Token điều phối chu kỳ hủy bỏ tác vụ đa luồng từ xa
+            _cts = new CancellationTokenSource();
+
+            try
+            {
+                lblProcessingStatus.Text = "Đang kết nối CSDL và xử lý dữ liệu lớn...";
+
+                // Tiến hành dùng từ khóa await kết hợp Task.Run để đẩy toàn bộ tác vụ nặng tính toán xuống luồng nền Background Thread
+                // UI Thread hoàn toàn tự do giúp người dùng kéo giãn, phóng to Form thoải mái mà không bị đơ "Not Responding"
+                BindingList<RevenueModel> resultDataList = await Task.Run(() => PerformHeavyAnalyticsSimulation(_cts.Token), _cts.Token);
+
+                // Sau khi Background Thread hoàn thành tính toán xong, tự động nhảy về đây (UI Thread) để cập nhật kết quả lên lưới
+                dgvRevenueData.DataSource = resultDataList;
+                lblProcessingStatus.Text = $"Thống kê thành công! Đã tìm thấy {resultDataList.Count} bản ghi giao dịch.";
+                pgbLoading.Value = 100;
+            }
+            catch (OperationCanceledException)
+            {
+                // Bắt chính xác ngoại lệ khi người dùng chủ động nhấn nút Hủy Thao Tác (Yêu cầu 2)
+                dgvRevenueData.DataSource = null;
+                pgbLoading.Value = 0;
+                lblProcessingStatus.Text = "Hệ thống: Đã hủy thao tác thống kê ngầm!";
+                MessageBox.Show("Tiến trình tổng hợp dữ liệu doanh thu lớn đã được ngắt bỏ an toàn!", "Thông báo hủy", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Xảy ra lỗi hệ thống bất ngờ: {ex.Message}", "Lỗi xử lý", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                // Dọn dẹp bộ nhớ giải phóng tài nguyên Token và phục hồi trạng thái ban đầu của các nút bấm điều khiển
+                _cts.Dispose();
+                _cts = null;
+                btnAnalytics.Enabled = true;
+                btnCancel.Enabled = false;
+            }
+        }
+
+        // HÀM GIẢ LẬP TRUY XUẤT CƠ SỞ DỮ LIỆU CỰC LỚN MẤT TỪ 4 ĐẾN 6 GIÂY (BACKGROUND THREAD)
+        private BindingList<RevenueModel> PerformHeavyAnalyticsSimulation(CancellationToken token)
+        {
+            var mockDataList = new BindingList<RevenueModel>();
+            Random rand = new Random();
+            string[] services = { "Gói Thẻ VIP Gym", "Thuê Huấn Luyện Viên Cá Nhân PT", "Dịch Vụ Sửa Chữa Thiết Bị", "Bán Linh Kiện Lẻ", "Gói Tài Liệu Học Tập" };
+
+            // Giả lập tiến trình lặp tính toán phức tạp chia nhỏ ra làm 10 bước kiểm tra liên tục
+            // Mỗi bước kéo dài 500ms tổng cộng thời gian tính toán mất đúng 5 giây hệ thống thực tế
+            for (int i = 1; i <= 10; i++)
+            {
+                // CỨ SAU MỖI BƯỚC LẶP, CẦN KIỂM TRA XEM NGƯỜI DÙNG CÓ BẤM NÚT [HỦY THAO TÁC] TỪ CỬA SỔ GIAO DIỆN HAY KHÔNG
+                token.ThrowIfCancellationRequested();
+
+                // Giả lập ngủ luồng nền tính toán 500ms
+                Thread.Sleep(500);
+
+                // Đồng bộ cập nhật giá trị phần trăm tiến độ nhảy đều đặn trên thanh ProgressBar thông qua Invoke an toàn luồng
+                int progressPercent = i * 10;
+                this.Invoke(new Action(() =>
+                {
+                    pgbLoading.Value = progressPercent;
+                    lblProcessingStatus.Text = $"Đang phân tích tổng hợp dữ liệu giao dịch... ({progressPercent}%)";
+                }));
+            }
+
+            // Sinh dữ liệu ngẫu nhiên mô phỏng kết quả trả về từ CSDL sau khi tổng hợp thành công
+            string currentSelectedBranch = this.Invoke(new Func<string>(() => cboBranch.SelectedItem.ToString())) as string;
+            int totalRecords = rand.Next(15, 40);
+
+            for (int k = 1; k <= totalRecords; k++)
+            {
+                mockDataList.Add(new RevenueModel
+                {
+                    TransactionId = $"GD{rand.Next(100000, 999999)}",
+                    TransactionDate = DateTime.Now.AddDays(-rand.Next(1, 30)).AddHours(-rand.Next(1, 24)),
+                    BranchName = currentSelectedBranch == "Tất cả chi nhánh" ? $"Chi nhánh miền {rand.Next(1, 4)}" : currentSelectedBranch,
+                    ServiceType = services[rand.Next(0, services.Length)],
+                    Amount = rand.Next(5, 150) * 50000
+                });
+            }
+
+            return mockDataList;
+        }
+
+        // =========================================================================
+        // NGHIỆP VỤ 2: HỦY TÁC VỤ AN TOÀN (CANCELLATION) THEO THỜI GIAN THỰC NGƯỜI DÙNG KHẨN CẤP
+        // =========================================================================
+        private void BtnCancel_Click(object sender, EventArgs e)
+        {
+            if (_cts != null)
+            {
+                lblProcessingStatus.Text = "Đang gửi lệnh ngắt tiến trình lên hệ thống luồng ngầm...";
+                btnCancel.Enabled = false; // Khóa nút để tránh bấm dồn dập nhiều lần
+                _cts.Cancel(); // Phát lệnh ngắt Token ra hiệu cho Background Thread dừng tính toán lập tức
+            }
+        }
+    }
+}
