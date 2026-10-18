@@ -1,0 +1,252 @@
+///////
+using System;
+
+namespace bai1_18_10_
+{
+    public class MemberModel
+    {
+        public string MemberId { get; set; }
+        public string FullName { get; set; }
+        public string Phone { get; set; }
+        public string Package { get; set; }
+        public DateTime StartDate { get; set; }
+        public decimal Fee { get; set; }
+    }
+}
+///////
+using System;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Windows.Forms;
+
+namespace bai1_18_10_
+{
+    public partial class Form1 : Form
+    {
+        // Sử dụng BindingList và BindingSource để quản lý trạng thái đồng bộ dữ liệu 2 chiều tự động
+        private BindingList<MemberModel> memberList = new BindingList<MemberModel>();
+        private BindingSource bindingSource = new BindingSource();
+        private int autoIncrementId = 1; // Biến đếm phục vụ tự động sinh mã hội viên
+
+        public Form1()
+        {
+            InitializeComponent();
+
+            // Đăng ký các sự kiện tương tác
+            dgvMembers.SelectionChanged += DgvMembers_SelectionChanged;
+            cboPackage.SelectedIndexChanged += CboPackage_SelectedIndexChanged;
+
+            btnAdd.Click += BtnAdd_Click;
+            btnUpdate.Click += BtnUpdate_Click;
+            btnDelete.Click += BtnDelete_Click;
+            btnClear.Click += BtnClear_Click;
+
+            // Liên kết dữ liệu qua BindingSource
+            bindingSource.DataSource = memberList;
+            dgvMembers.DataSource = bindingSource;
+
+            // Khởi tạo một số dữ liệu kiểm thử mặc định ban đầu và sinh mã tự động tiếp theo
+            LoadMockData();
+            GenerateNextMemberId();
+        }
+
+        private void LoadMockData()
+        {
+            memberList.Add(new MemberModel { MemberId = "HV001", FullName = "Nguyễn Hoàng Nam", Phone = "0912345678", Package = "Theo tháng", StartDate = DateTime.Today.AddDays(-10), Fee = 500000 });
+            memberList.Add(new MemberModel { MemberId = "HV002", FullName = "Trần Thu Thủy", Phone = "0987654321", Package = "6 tháng", StartDate = DateTime.Today.AddDays(-30), Fee = 2700000 });
+            memberList.Add(new MemberModel { MemberId = "HV003", FullName = "Phạm Minh Đức", Phone = "0905556677", Package = "1 năm", StartDate = DateTime.Today.AddDays(-5), Fee = 5000000 });
+            autoIncrementId = 4; // Mã tiếp theo sẽ là HV004
+        }
+
+        // Hàm tự động sinh mã hội viên liên tục (HV001, HV002, HV003...)
+        private void GenerateNextMemberId()
+        {
+            txtMemberId.Text = $"HV{autoIncrementId:D3}";
+        }
+
+        // Tự động gợi ý mức giá dựa trên gói tập được chọn giúp người dùng tiện nhập liệu
+        private void CboPackage_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (txtMemberId.ReadOnly == false) return; // Nếu đang chọn dòng cũ để xem thì giữ nguyên giá cũ
+
+            if (cboPackage.SelectedItem?.ToString() == "Theo tháng") txtFee.Text = "500000";
+            else if (cboPackage.SelectedItem?.ToString() == "6 tháng") txtFee.Text = "2700000";
+            else if (cboPackage.SelectedItem?.ToString() == "1 năm") txtFee.Text = "5000000";
+        }
+
+        // NGHIỆP VỤ 3. ĐỒNG BỘ DATA BINDING 2 CHIỀU: Đổ ngược thông tin từ Grid lên ô nhập
+        private void DgvMembers_SelectionChanged(object sender, EventArgs e)
+        {
+            if (dgvMembers.CurrentRow != null)
+            {
+                var member = (MemberModel)dgvMembers.CurrentRow.DataBoundItem;
+                txtMemberId.Text = member.MemberId;
+                txtFullName.Text = member.FullName;
+                txtPhone.Text = member.Phone;
+                cboPackage.SelectedItem = member.Package;
+                dtpStartDate.Value = member.StartDate;
+                txtFee.Text = member.Fee.ToString("F0"); // Định dạng số nguyên để chỉnh sửa
+            }
+        }
+
+        // NGHIỆP VỤ 2. KIỂM TRA HỢP LỆ DỮ LIỆU CHẶT CHẼ TRƯỚC KHI THAO TÁC (VALIDATION)
+        private bool ValidateForm()
+        {
+            errorProvider.Clear();
+            bool isValid = true;
+
+            // Kiểm tra tên hội viên: Không trống, không chứa ký tự đặc biệt
+            if (string.IsNullOrWhiteSpace(txtFullName.Text))
+            {
+                errorProvider.SetError(txtFullName, "Họ và tên hội viên không được để trống.");
+                isValid = false;
+            }
+            else
+            {
+                // Biểu thức chính quy: Chỉ chấp nhận chữ cái tiếng Việt, dấu cách, chữ cái thông thường
+                string pattern = @"^[\p{L}\s]+$";
+                if (!Regex.IsMatch(txtFullName.Text.Trim(), pattern))
+                {
+                    errorProvider.SetError(txtFullName, "Tên hội viên chỉ chứa chữ cái và khoảng trắng, không chứa ký tự đặc biệt hoặc chữ số.");
+                    isValid = false;
+                }
+            }
+
+            // Kiểm tra số điện thoại: Phải đúng 10 chữ số
+            if (string.IsNullOrWhiteSpace(txtPhone.Text))
+            {
+                errorProvider.SetError(txtPhone, "Số điện thoại bắt buộc phải nhập.");
+                isValid = false;
+            }
+            else
+            {
+                string phonePattern = @"^\d{10}$";
+                if (!Regex.IsMatch(txtPhone.Text.Trim(), phonePattern))
+                {
+                    errorProvider.SetError(txtPhone, "Số điện thoại không hợp lệ. Phải bao gồm đúng 10 ký tự chữ số.");
+                    isValid = false;
+                }
+            }
+
+            // Kiểm tra gói tập
+            if (cboPackage.SelectedIndex == -1)
+            {
+                errorProvider.SetError(cboPackage, "Vui lòng chọn một gói tập dịch vụ.");
+                isValid = false;
+            }
+
+            // Kiểm tra phí dịch vụ: Phải là số nguyên dương
+            if (string.IsNullOrWhiteSpace(txtFee.Text))
+            {
+                errorProvider.SetError(txtFee, "Phí dịch vụ không được bỏ trống.");
+                isValid = false;
+            }
+            else if (!long.TryParse(txtFee.Text.Trim(), out long feeValue) || feeValue <= 0)
+            {
+                errorProvider.SetError(txtFee, "Phí dịch vụ phải là một số nguyên dương lớn hơn 0.");
+                isValid = false;
+            }
+
+            return isValid;
+        }
+
+        // THAO TÁC NGHIỆP VỤ: THÊM HỘI VIÊN MỚI
+        private void BtnAdd_Click(object sender, EventArgs e)
+        {
+            if (!ValidateForm()) return;
+
+            // Kiểm tra an toàn xem có lỡ trùng mã hội viên đã có không
+            string currentId = txtMemberId.Text.Trim();
+            if (memberList.Any(m => m.MemberId.Equals(currentId, StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show("Mã hội viên này đã tồn tại trong danh sách hệ thống!", "Lỗi trùng lặp", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            var newMember = new MemberModel
+            {
+                MemberId = currentId,
+                FullName = txtFullName.Text.Trim(),
+                Phone = txtPhone.Text.Trim(),
+                Package = cboPackage.SelectedItem.ToString(),
+                StartDate = dtpStartDate.Value.Date,
+                Fee = decimal.Parse(txtFee.Text.Trim())
+            };
+
+            memberList.Add(newMember);
+            autoIncrementId++; // Tăng mã số tự động lên 1 đơn vị cho lượt tiếp theo
+
+            MessageBox.Show("Thêm mới hội viên thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            BtnClear_Click(null, null); // Hoàn thành thì tự dọn dẹp ô nhập
+        }
+
+        // THAO TÁC NGHIỆP VỤ: SỬA THÔNG TIN ĐỒNG BỘ 2 CHIỀU TỰ ĐỘNG
+        private void BtnUpdate_Click(object sender, EventArgs e)
+        {
+            if (dgvMembers.CurrentRow == null)
+            {
+                MessageBox.Show("Vui lòng chọn một dòng hội viên bên dưới bảng để tiến hành sửa!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (!ValidateForm()) return;
+
+            // Lấy trực tiếp đối tượng đang liên kết dữ liệu với dòng được chọn
+            var currentMember = (MemberModel)dgvMembers.CurrentRow.DataBoundItem;
+            var target = memberList.FirstOrDefault(m => m.MemberId == currentMember.MemberId);
+
+            if (target != null)
+            {
+                // Thay đổi dữ liệu trực tiếp trên phần tử của BindingList
+                target.FullName = txtFullName.Text.Trim();
+                target.Phone = txtPhone.Text.Trim();
+                target.Package = cboPackage.SelectedItem.ToString();
+                target.StartDate = dtpStartDate.Value.Date;
+                target.Fee = decimal.Parse(txtFee.Text.Trim());
+
+                // Sử dụng ResetBindings để kích hoạt BindingList tự động cập nhật ngay lên lưới dgvMembers mà không cần nạp lại danh sách
+                memberList.ResetBindings();
+
+                MessageBox.Show("Cập nhật thông tin hội viên thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        // THAO TÁC NGHIỆP VỤ: XÓA CÓ XÁC NHẬN CẢNH BÁO
+        private void BtnDelete_Click(object sender, EventArgs e)
+        {
+            if (dgvMembers.CurrentRow == null) return;
+
+            var currentMember = (MemberModel)dgvMembers.CurrentRow.DataBoundItem;
+
+            // Hiển thị MessageBox xác nhận (Yes/No) loại cảnh báo (MessageBoxIcon.Warning) theo đúng yêu cầu nghiệp vụ
+            var confirmResult = MessageBox.Show($"Bạn có thực sự muốn xóa hội viên '{currentMember.FullName}' (Mã: {currentMember.MemberId}) ra khỏi hệ thống phòng Gym không?",
+                "Cảnh báo xác nhận xóa", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+            if (confirmResult == DialogResult.Yes)
+            {
+                var target = memberList.FirstOrDefault(m => m.MemberId == currentMember.MemberId);
+                if (target != null)
+                {
+                    memberList.Remove(target);
+                    MessageBox.Show("Đã loại bỏ hội viên thành công khỏi danh sách!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    BtnClear_Click(null, null);
+                }
+            }
+        }
+
+        private void BtnClear_Click(object sender, EventArgs e)
+        {
+            // Trả lại trạng thái sinh mã tự động mới
+            GenerateNextMemberId();
+            txtFullName.Clear();
+            txtPhone.Clear();
+            cboPackage.SelectedIndex = -1;
+            dtpStartDate.Value = DateTime.Today;
+            txtFee.Clear();
+            errorProvider.Clear(); // Xóa tất cả các thông báo đỏ báo lỗi nếu có
+        }
+    }
+}
